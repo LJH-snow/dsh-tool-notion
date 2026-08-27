@@ -1,0 +1,17 @@
+# dsh-tool-notion composition example
+# Load this plugin in a DeepSeek Harness composition config.
+#
+# There are two ways to load it:
+# 1. From GitHub before npm publishing:
+- name: 'github:LJH-snow/dsh-tool-notion'
+# 2. After npm publishing:
+# - name: '@libai168/dsh-tool-notion'
+  config:
+    # Notion internal integration token. Create one at https://www.notion.so/my-integrations.
+    apiToken: 'ntn_xxx_secret'
+    # Optional REST API endpoint override (default https://api.notion.com)
+    # baseUrl: 'https://api.notion.com'
+    # Optional Notion API version header (default 2022-06-28)
+    # notionVersion: '2022-06-28'
+    # Optional request timeout in ms (default 15000)
+    # timeoutMs: 15000
