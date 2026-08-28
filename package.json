@@ -1,7 +1,7 @@
 {
   "name": "@libai168/dsh-tool-notion",
-  "description": "Notion tools for DeepSeek Harness: search pages, read and write documents, query databases, list comments, and inspect users",
-  "version": "0.1.0",
+  "description": "Notion tools for DeepSeek Harness: search pages, read and write documents, query databases and schemas, list comments, and inspect users",
+  "version": "0.2.0",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

@@ -38,6 +38,19 @@ export interface NotionDatabaseSummary {
   lastEditedTime: string
 }
 
+export interface NotionDatabaseSchema extends NotionDatabaseSummary {
+  propertyCount: number
+  propertiesJson: string
+}
+
+export interface NotionDatabaseSchemaProperty {
+  id: string
+  name: string
+  type: string
+  options: string[]
+  detailsJson: string
+}
+
 export interface NotionCommentItem {
   id: string
   text: string
@@ -119,6 +132,14 @@ interface RawDatabase {
   created_time?: string
   last_edited_time?: string
   title?: RawText[]
+  properties?: Record<string, RawDatabaseProperty>
+}
+
+interface RawDatabaseProperty {
+  id?: string
+  name?: string
+  type?: string
+  [key: string]: unknown
 }
 
 interface RawComment {
@@ -193,6 +214,46 @@ function mapDatabase(raw: RawDatabase): NotionDatabaseSummary {
     archived: raw.archived ?? false,
     createdTime: raw.created_time ?? '',
     lastEditedTime: raw.last_edited_time ?? '',
+  }
+}
+
+function propertyOptions(raw: RawDatabaseProperty): string[] {
+  const type = raw.type
+  const detail = type && typeof raw[type] === 'object' && raw[type] !== null
+    ? raw[type] as Record<string, unknown>
+    : undefined
+  if (!detail || !Array.isArray(detail.options)) return []
+  return detail.options.map(option => {
+    if (typeof option === 'string') return option
+    if (option && typeof option === 'object' && typeof (option as { name?: unknown }).name === 'string') {
+      return (option as { name: string }).name
+    }
+    return ''
+  }).filter(Boolean)
+}
+
+function propertyDetails(raw: RawDatabaseProperty): string {
+  const type = raw.type
+  const detail = type && typeof raw[type] === 'object' && raw[type] !== null
+    ? { ...raw[type] as Record<string, unknown> }
+    : undefined
+  if (!detail) return ''
+  delete detail.options
+  return Object.keys(detail).length > 0 ? JSON.stringify(detail) : ''
+}
+
+function mapDatabaseSchema(raw: RawDatabase): NotionDatabaseSchema {
+  const normalized = Object.entries(raw.properties ?? {}).map(([name, property]) => ({
+    id: property.id ?? '',
+    name,
+    type: property.type ?? 'unknown',
+    options: propertyOptions(property),
+    detailsJson: propertyDetails(property),
+  }))
+  return {
+    ...mapDatabase(raw),
+    propertyCount: normalized.length,
+    propertiesJson: JSON.stringify(normalized),
   }
 }
 
@@ -514,6 +575,19 @@ export class NotionClient {
       options.signal,
     )
     return (data.results ?? []).filter(database => database.object === 'database').map(mapDatabase)
+  }
+
+  async getDatabase(
+    databaseId: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<NotionDatabaseSchema> {
+    const data = await this.request<RawDatabase>(
+      'GET',
+      `/v1/databases/${encodeURIComponent(databaseId)}`,
+      undefined,
+      options.signal,
+    )
+    return mapDatabaseSchema(data)
   }
 
   async queryDatabase(

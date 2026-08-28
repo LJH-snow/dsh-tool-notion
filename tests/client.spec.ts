@@ -27,6 +27,31 @@ const blockNode = {
   paragraph: { rich_text: [{ plain_text: 'Hello', text: { content: 'Hello' } }] },
 }
 
+const databaseSchemaNode = {
+  id: 'db-1',
+  object: 'database',
+  url: 'https://www.notion.so/db',
+  archived: false,
+  created_time: '2026-08-01T00:00:00.000Z',
+  last_edited_time: '2026-08-02T00:00:00.000Z',
+  title: [{ plain_text: 'Projects', text: { content: 'Projects' } }],
+  properties: {
+    Name: { id: 'title', name: 'Name', type: 'title', title: {} },
+    Status: {
+      id: 'status',
+      name: 'Status',
+      type: 'status',
+      status: { options: [{ name: 'Done', color: 'green' }, { name: 'In Progress', color: 'blue' }] },
+    },
+    Owner: {
+      id: 'owner',
+      name: 'Owner',
+      type: 'relation',
+      relation: { database_id: 'db-2', synced_property_name: 'Key', synced_property_id: 'key' },
+    },
+  },
+}
+
 describe('NotionClient', () => {
   it('searches pages with bearer auth, version header, filter, and page size', async () => {
     const fetchImpl = vi.fn(async () => json({ results: [pageNode] }))
@@ -167,6 +192,30 @@ describe('NotionClient', () => {
       sorts: [{ property: 'Last edited time', direction: 'descending' }],
       page_size: 50,
     })
+  })
+
+  it('gets a database schema and normalizes property options and details', async () => {
+    const fetchImpl = vi.fn(async () => json(databaseSchemaNode))
+    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const schema = await client.getDatabase('db-1')
+
+    expect(schema).toMatchObject({
+      id: 'db-1',
+      title: 'Projects',
+      propertyCount: 3,
+    })
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://api.notion.com/v1/databases/db-1')
+    expect(JSON.parse(schema.propertiesJson)).toEqual([
+      { id: 'title', name: 'Name', type: 'title', options: [], detailsJson: '' },
+      { id: 'status', name: 'Status', type: 'status', options: ['Done', 'In Progress'], detailsJson: '' },
+      {
+        id: 'owner',
+        name: 'Owner',
+        type: 'relation',
+        options: [],
+        detailsJson: JSON.stringify({ database_id: 'db-2', synced_property_name: 'Key', synced_property_id: 'key' }),
+      },
+    ])
   })
 
   it('lists and creates comments', async () => {

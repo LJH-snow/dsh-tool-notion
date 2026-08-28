@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README.zh.md)
 
-A Cordis tool plugin that gives [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) Notion knowledge-base capabilities. Agents can search pages, read document content, create and update pages, append blocks, query databases, read and write comments, and list users.
+A Cordis tool plugin that gives [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) Notion knowledge-base capabilities. Agents can search pages, read document content, create and update pages, append blocks, query databases and inspect their schemas, read and write comments, and list users.
 
 It follows the official "everything is a plugin" architecture with `ctx.tools.register(defineTool(...))` and the [adding-a-tool](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cookbook/adding-a-tool.md) contract.
 
@@ -52,6 +52,7 @@ Full example: [examples/cordis.yml](examples/cordis.yml).
 | `notion_update_page` | Update title, properties, or archived state | yes |
 | `notion_append_blocks` | Append Notion blocks or plain text paragraphs | yes |
 | `notion_list_databases` | List databases accessible to the integration | yes |
+| `notion_get_database_schema` | Get database property names, types, selectable options, and relation/formula details | yes |
 | `notion_query_database` | Query a database with filter and sort JSON | yes |
 | `notion_list_page_comments` | List comments on a page | yes |
 | `notion_add_comment` | Add a comment to a page | yes |

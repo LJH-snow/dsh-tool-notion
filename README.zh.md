@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）提供 Notion 知识库能力的 Cordis 工具插件。Agent 可以通过自然语言搜索页面、读取文档内容、创建和更新页面、追加 Block、查询数据库、读写评论，并查看可用用户。
+为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）提供 Notion 知识库能力的 Cordis 工具插件。Agent 可以通过自然语言搜索页面、读取文档内容、创建和更新页面、追加 Block、查询数据库并查看数据库 schema、读写评论，并查看可用用户。
 
 插件遵循官方「一切皆插件」架构，通过 `ctx.tools.register(defineTool(...))` 注册模型可见工具，并符合 [adding-a-tool](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cookbook/adding-a-tool.md) 契约。
 
@@ -52,6 +52,7 @@ npm install /path/to/dsh-tool-notion
 | `notion_update_page` | 更新标题、属性或归档状态 | 是 |
 | `notion_append_blocks` | 追加 Notion Block 或纯文本段落 | 是 |
 | `notion_list_databases` | 列出集成可访问的数据库 | 是 |
+| `notion_get_database_schema` | 查看数据库属性名、类型、可选值和 relation/formula 细节 | 是 |
 | `notion_query_database` | 使用 filter/sort JSON 查询数据库 | 是 |
 | `notion_list_page_comments` | 查看页面评论 | 是 |
 | `notion_add_comment` | 给页面添加评论 | 是 |

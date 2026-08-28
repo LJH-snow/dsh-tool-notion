@@ -32,6 +32,7 @@ describe('tool definitions', () => {
       'notion_add_comment',
       'notion_append_blocks',
       'notion_create_page',
+      'notion_get_database_schema',
       'notion_get_page',
       'notion_list_databases',
       'notion_list_page_comments',
@@ -47,6 +48,10 @@ describe('tool definitions', () => {
     expect(await map.notion_search_pages.execute({ query: 'docs' }, exec())).toMatchObject({
       authenticated: false,
       items: [],
+    })
+    expect(await map.notion_get_database_schema.execute({ databaseId: 'db-1' }, exec())).toMatchObject({
+      authenticated: false,
+      found: false,
     })
     expect(await map.notion_get_page.execute({ id: 'page-1' }, exec())).toMatchObject({ authenticated: false, found: false })
     expect(await map.notion_create_page.execute({ parentPageId: 'parent-1', title: 'x' }, exec())).toMatchObject({ created: false })
@@ -105,6 +110,46 @@ describe('tool definitions', () => {
     expect(body.sorts).toEqual([{ property: 'Last edited time', direction: 'descending' }])
   })
 
+  it('get_database_schema executes and returns normalized database properties', async () => {
+    const fetchImpl = vi.fn(async () => json({
+      id: 'db-1',
+      object: 'database',
+      url: 'https://www.notion.so/db',
+      archived: false,
+      created_time: '2026-08-01T00:00:00.000Z',
+      last_edited_time: '2026-08-02T00:00:00.000Z',
+      title: [{ plain_text: 'Projects', text: { content: 'Projects' } }],
+      properties: {
+        Name: { id: 'title', name: 'Name', type: 'title', title: {} },
+        Status: {
+          id: 'status',
+          name: 'Status',
+          type: 'status',
+          status: { options: [{ name: 'Done', color: 'green' }, { name: 'In Progress', color: 'blue' }] },
+        },
+      },
+    }))
+    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const map = tools(client)
+    const result = await map.notion_get_database_schema.execute({ databaseId: 'db-1' }, exec())
+
+    expect(result).toMatchObject({
+      authenticated: true,
+      found: true,
+      id: 'db-1',
+      title: 'Projects',
+      propertyCount: 2,
+    })
+    const properties = JSON.parse((result as { propertiesJson: string }).propertiesJson)
+    expect(properties[1]).toEqual({
+      id: 'status',
+      name: 'Status',
+      type: 'status',
+      options: ['Done', 'In Progress'],
+      detailsJson: '',
+    })
+  })
+
   it('render produces readable page text from the canonical value', async () => {
     const map = tools()
     const blocks = await (map.notion_search_pages.output as { render: (a: unknown, v: any) => unknown }).render({}, {
@@ -120,6 +165,8 @@ describe('tool definitions', () => {
     expect(map.notion_search_pages.presentCall!({ query: 'release' })).toMatchObject({ card: 'generic', kind: 'search' })
     expect(map.notion_get_page.presentCall!({ id: 'page-1' })).toMatchObject({ card: 'generic', kind: 'read' })
     expect(map.notion_get_page.presentResult!({ id: 'page-1' }, { authenticated: true, found: false })).toMatchObject({ title: 'Page not found' })
+    expect(map.notion_get_database_schema.presentCall!({ databaseId: 'db-1' })).toMatchObject({ card: 'generic', kind: 'read' })
+    expect(map.notion_get_database_schema.presentResult!({ databaseId: 'db-1' }, { authenticated: true, found: true, propertyCount: 2 })).toMatchObject({ title: '2 database properties' })
     expect(map.notion_create_page.presentCall!({ parentPageId: 'parent-1', title: 'x' })).toMatchObject({ card: 'generic', kind: 'edit' })
     expect(map.notion_create_page.presentResult!({ parentPageId: 'parent-1', title: 'x' }, { created: true, id: 'page-2' })).toMatchObject({ title: 'Notion page page-2 created' })
   })

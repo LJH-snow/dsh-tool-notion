@@ -345,6 +345,59 @@ export function createTools(client: NotionClient) {
     }),
 
     defineTool({
+      name: 'notion_get_database_schema',
+      description: 'Get a Notion database schema: property names, types, selectable options, and relation/formula details.',
+      parameters: {
+        databaseId: { type: 'string', required: true, description: 'Notion database UUID' },
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            authenticated: { type: 'boolean' },
+            found: { type: 'boolean' },
+            reason: { type: 'string' },
+            id: { type: 'string' },
+            title: { type: 'string' },
+            url: { type: 'string' },
+            lastEditedTime: { type: 'string' },
+            propertyCount: { type: 'number' },
+            propertiesJson: { type: 'string' },
+          },
+        },
+        render: (_args, value) => {
+          if (!value.authenticated) return [{ type: 'text', text: 'Getting a Notion database schema requires an integration token.' }]
+          if (!value.found) return [{ type: 'text', text: value.reason ?? 'Notion database not found.' }]
+          return renderDatabaseSchema(value)
+        },
+      },
+      presentCall(args): ToolCallView {
+        return { card: 'generic', title: `Notion database schema ${args.databaseId}`, kind: 'read' }
+      },
+      presentResult(_args, result): ToolResultView | undefined {
+        const v = result as unknown as { authenticated?: boolean; found?: boolean; propertyCount?: number }
+        if (!v.authenticated) return { card: 'generic', title: 'Requires Notion token' }
+        if (!v.found) return { card: 'generic', title: 'Database not found' }
+        return { card: 'generic', title: `${v.propertyCount ?? 0} database properties`, content: [{ type: 'text', text: `${v.propertyCount ?? 0} database properties` }] }
+      },
+      async execute(args, exec) {
+        if (!client.hasToken()) {
+          return { authenticated: false, found: false, reason: 'Getting a Notion database schema requires a Notion integration token.' }
+        }
+        try {
+          const schema = await client.getDatabase(args.databaseId as string, { signal: exec.signal })
+          return { authenticated: true, found: true, ...schema }
+        } catch (error) {
+          if (error instanceof NotionError && (error.status === 404 || /not found/i.test(error.message))) {
+            return { authenticated: true, found: false, reason: 'Notion database not found.' }
+          }
+          throw error
+        }
+      },
+    }),
+
+    defineTool({
       name: 'notion_query_database',
       description: 'Query a Notion database and return matching pages with their titles and properties.',
       parameters: {
@@ -641,6 +694,26 @@ function renderDatabaseList(items: Array<{ title?: string; url?: string }>) {
   return [{ type: 'text' as const, text: items.map(item =>
     `${item.title ?? '(untitled)'} ${item.url ?? ''}`,
   ).join('\n') }]
+}
+
+function renderDatabaseSchema(value: { propertyCount?: number; propertiesJson?: string }) {
+  const lines = [`${value.propertyCount ?? 0} database properties`]
+  try {
+    const properties = JSON.parse(value.propertiesJson ?? '[]') as Array<{
+      name?: string
+      type?: string
+      options?: string[]
+      detailsJson?: string
+    }>
+    for (const property of properties) {
+      const options = property.options?.length ? ` options: ${property.options.join(', ')}` : ''
+      const details = property.detailsJson ? ` details: ${property.detailsJson}` : ''
+      lines.push(`- ${property.name ?? '(unnamed)'} (${property.type ?? 'unknown'})${options}${details}`)
+    }
+  } catch {
+    lines.push('propertiesJson is not readable.')
+  }
+  return [{ type: 'text' as const, text: lines.join('\n') }]
 }
 
 function renderCommentList(items: Array<{ authorName?: string | null; createdTime?: string; text?: string }>) {
