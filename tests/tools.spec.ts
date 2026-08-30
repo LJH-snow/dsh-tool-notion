@@ -61,13 +61,47 @@ describe('tool definitions', () => {
   })
 
   it('search_pages executes with a token and forwards the request body', async () => {
-    const fetchImpl = vi.fn(async () => json({ results: [pageNode] }))
+    const fetchImpl = vi.fn(async () => json({ results: [pageNode], next_cursor: 'cursor-2', has_more: true }))
     const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
     const map = tools(client)
-    const result = await map.notion_search_pages.execute({ query: 'release', limit: 500 }, exec())
-    expect(result).toMatchObject({ authenticated: true, found: true, items: [{ title: 'Release notes' }] })
+    const result = await map.notion_search_pages.execute({ query: 'release', limit: 500, startCursor: 'cursor-1' }, exec())
+    expect(result).toMatchObject({
+      authenticated: true,
+      found: true,
+      items: [{ title: 'Release notes' }],
+      nextCursor: 'cursor-2',
+      hasMore: true,
+    })
     const body = JSON.parse(String((fetchImpl.mock.calls[0] as [string, RequestInit])[1]?.body))
-    expect(body).toMatchObject({ query: 'release', page_size: 100, filter: { value: 'page', property: 'object' } })
+    expect(body).toMatchObject({
+      query: 'release',
+      page_size: 100,
+      filter: { value: 'page', property: 'object' },
+      start_cursor: 'cursor-1',
+    })
+  })
+
+  it('list_databases forwards startCursor and returns cursor metadata', async () => {
+    const fetchImpl = vi.fn(async () => json({
+      results: [{
+        id: 'db-1',
+        object: 'database',
+        url: 'https://www.notion.so/db',
+        archived: false,
+        created_time: '2026-08-01T00:00:00.000Z',
+        last_edited_time: '2026-08-02T00:00:00.000Z',
+        title: [{ plain_text: 'Projects', text: { content: 'Projects' } }],
+      }],
+      next_cursor: 'db-next',
+      has_more: true,
+    }))
+    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const map = tools(client)
+    const result = await map.notion_list_databases.execute({ limit: 10, startCursor: 'db-cursor' }, exec())
+    expect(result).toMatchObject({ authenticated: true, found: true, items: [{ title: 'Projects' }], nextCursor: 'db-next', hasMore: true })
+    const body = JSON.parse(String((fetchImpl.mock.calls[0] as [string, RequestInit])[1]?.body))
+    expect(body.start_cursor).toBe('db-cursor')
+    expect(body.page_size).toBe(10)
   })
 
   it('create_page validates parents and forwards properties and children', async () => {
@@ -96,18 +130,27 @@ describe('tool definitions', () => {
   })
 
   it('query_database parses filter and sorts JSON', async () => {
-    const fetchImpl = vi.fn(async () => json({ results: [pageNode] }))
+    const fetchImpl = vi.fn(async () => json({ results: [pageNode], next_cursor: null, has_more: false }))
     const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
     const map = tools(client)
     const result = await map.notion_query_database.execute({
       databaseId: 'db-1',
       filterJson: '{"property":"Status","status":{"equals":"Done"}}',
       sortsJson: '[{"property":"Last edited time","direction":"descending"}]',
+      limit: 20,
+      startCursor: 'query-cursor',
     }, exec())
-    expect(result).toMatchObject({ authenticated: true, found: true, items: [{ title: 'Release notes' }] })
+    expect(result).toMatchObject({
+      authenticated: true,
+      found: true,
+      items: [{ title: 'Release notes' }],
+      nextCursor: null,
+      hasMore: false,
+    })
     const body = JSON.parse(String((fetchImpl.mock.calls[0] as [string, RequestInit])[1]?.body))
     expect(body.filter).toEqual({ property: 'Status', status: { equals: 'Done' } })
     expect(body.sorts).toEqual([{ property: 'Last edited time', direction: 'descending' }])
+    expect(body.start_cursor).toBe('query-cursor')
   })
 
   it('get_database_schema executes and returns normalized database properties', async () => {

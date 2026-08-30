@@ -38,6 +38,7 @@ export function createTools(client: NotionClient) {
       parameters: {
         query: { type: 'string', description: 'Search text; leave empty to list recent pages' },
         limit: { type: 'integer', description: 'Maximum pages, 1-100 (default 20)' },
+        startCursor: { type: 'string', description: 'Opaque cursor from a previous response nextCursor' },
       },
       output: {
         schema: {
@@ -47,6 +48,8 @@ export function createTools(client: NotionClient) {
             authenticated: { type: 'boolean' },
             found: { type: 'boolean' },
             reason: { type: 'string' },
+            nextCursor: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'Opaque cursor for the next page' },
+            hasMore: { type: 'boolean', description: 'Whether another page is available' },
             items: { type: 'array', items: pageItemSchema },
           },
         },
@@ -60,15 +63,19 @@ export function createTools(client: NotionClient) {
         return { card: 'generic', title: `Search Notion: ${args.query ?? 'all pages'}`, kind: 'search' }
       },
       presentResult(_args, result): ToolResultView | undefined {
-        const v = result as unknown as { authenticated?: boolean; found?: boolean; items?: unknown[]; reason?: string }
+        const v = result as unknown as { authenticated?: boolean; found?: boolean; items?: unknown[]; reason?: string; hasMore?: boolean }
         if (!v.authenticated) return { card: 'generic', title: 'Requires Notion token' }
         if (!v.found) return { card: 'generic', title: 'Pages unavailable' }
-        return { card: 'generic', title: `${(v.items ?? []).length} page(s)` }
+        return { card: 'generic', title: `${(v.items ?? []).length} page(s)${v.hasMore ? ' (more)' : ''}` }
       },
       async execute(args, exec) {
         if (!client.hasToken()) return { authenticated: false, found: false, items: [], reason: 'Searching Notion pages requires a Notion integration token.' }
-        const items = await client.searchPages(args.query ?? '', { limit: clampLimit(args.limit), signal: exec.signal })
-        return { authenticated: true, found: true, items }
+        const result = await client.searchPages(args.query ?? '', {
+          limit: clampLimit(args.limit),
+          startCursor: args.startCursor,
+          signal: exec.signal,
+        })
+        return { authenticated: true, found: true, items: result.items, nextCursor: result.nextCursor, hasMore: result.hasMore }
       },
     }),
 
@@ -296,6 +303,7 @@ export function createTools(client: NotionClient) {
       description: 'List Notion databases accessible to the integration.',
       parameters: {
         limit: { type: 'integer', description: 'Maximum databases, 1-100 (default 20)' },
+        startCursor: { type: 'string', description: 'Opaque cursor from a previous response nextCursor' },
       },
       output: {
         schema: {
@@ -305,6 +313,8 @@ export function createTools(client: NotionClient) {
             authenticated: { type: 'boolean' },
             found: { type: 'boolean' },
             reason: { type: 'string' },
+            nextCursor: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'Opaque cursor for the next page' },
+            hasMore: { type: 'boolean', description: 'Whether another page is available' },
             items: {
               type: 'array',
               items: {
@@ -332,15 +342,19 @@ export function createTools(client: NotionClient) {
         return { card: 'generic', title: 'Notion databases', kind: 'search' }
       },
       presentResult(_args, result): ToolResultView | undefined {
-        const v = result as unknown as { authenticated?: boolean; found?: boolean; items?: unknown[] }
+        const v = result as unknown as { authenticated?: boolean; found?: boolean; items?: unknown[]; hasMore?: boolean }
         if (!v.authenticated) return { card: 'generic', title: 'Requires Notion token' }
         if (!v.found) return { card: 'generic', title: 'Databases unavailable' }
-        return { card: 'generic', title: `${(v.items ?? []).length} database(s)` }
+        return { card: 'generic', title: `${(v.items ?? []).length} database(s)${v.hasMore ? ' (more)' : ''}` }
       },
       async execute(args, exec) {
         if (!client.hasToken()) return { authenticated: false, found: false, items: [], reason: 'Listing Notion databases requires a Notion integration token.' }
-        const items = await client.listDatabases({ limit: clampLimit(args.limit), signal: exec.signal })
-        return { authenticated: true, found: true, items }
+        const result = await client.listDatabases({
+          limit: clampLimit(args.limit),
+          startCursor: args.startCursor,
+          signal: exec.signal,
+        })
+        return { authenticated: true, found: true, items: result.items, nextCursor: result.nextCursor, hasMore: result.hasMore }
       },
     }),
 
@@ -405,6 +419,7 @@ export function createTools(client: NotionClient) {
         filterJson: { type: 'string', description: 'Notion database query filter as JSON object; optional' },
         sortsJson: { type: 'string', description: 'Notion database query sorts as JSON array; optional' },
         limit: { type: 'integer', description: 'Maximum pages, 1-100 (default 20)' },
+        startCursor: { type: 'string', description: 'Opaque cursor from a previous response nextCursor' },
       },
       output: {
         schema: {
@@ -414,6 +429,8 @@ export function createTools(client: NotionClient) {
             authenticated: { type: 'boolean' },
             found: { type: 'boolean' },
             reason: { type: 'string' },
+            nextCursor: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'Opaque cursor for the next page' },
+            hasMore: { type: 'boolean', description: 'Whether another page is available' },
             items: { type: 'array', items: pageItemSchema },
           },
         },
@@ -427,10 +444,10 @@ export function createTools(client: NotionClient) {
         return { card: 'generic', title: `Query Notion database ${args.databaseId}`, kind: 'search' }
       },
       presentResult(_args, result): ToolResultView | undefined {
-        const v = result as unknown as { authenticated?: boolean; found?: boolean; items?: unknown[] }
+        const v = result as unknown as { authenticated?: boolean; found?: boolean; items?: unknown[]; hasMore?: boolean }
         if (!v.authenticated) return { card: 'generic', title: 'Requires Notion token' }
         if (!v.found) return { card: 'generic', title: 'Database unavailable' }
-        return { card: 'generic', title: `${(v.items ?? []).length} page(s)` }
+        return { card: 'generic', title: `${(v.items ?? []).length} page(s)${v.hasMore ? ' (more)' : ''}` }
       },
       async execute(args, exec) {
         if (!client.hasToken()) return { authenticated: false, found: false, items: [], reason: 'Querying a Notion database requires a Notion integration token.' }
@@ -439,13 +456,14 @@ export function createTools(client: NotionClient) {
         const sorts = parseJsonArray(args.sortsJson)
         if (args.sortsJson && !sorts.ok) return { authenticated: true, found: false, items: [], reason: 'sortsJson must be a valid JSON array.' }
         try {
-          const items = await client.queryDatabase(args.databaseId as string, {
+          const result = await client.queryDatabase(args.databaseId as string, {
             filter: filter.value,
             sorts: sorts.value,
             limit: clampLimit(args.limit),
+            startCursor: args.startCursor,
             signal: exec.signal,
           })
-          return { authenticated: true, found: true, items }
+          return { authenticated: true, found: true, items: result.items, nextCursor: result.nextCursor, hasMore: result.hasMore }
         } catch (error) {
           if (error instanceof NotionError && (error.status === 404 || /not found/i.test(error.message))) {
             return { authenticated: true, found: false, items: [], reason: 'Notion database not found.' }

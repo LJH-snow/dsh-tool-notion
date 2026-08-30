@@ -6,7 +6,7 @@
 |---|---|
 | 项目名 | `dsh-tool-notion` |
 | 定位 | DeepSeek Harness 的独立 Notion 知识库插件 |
-| 版本 | v0.2.0 |
+| 版本 | v0.3.0 |
 | 架构 | Cordis 插件 + `ctx.tools.register(defineTool(...))` |
 | API | Notion REST API v1 |
 | 认证 | `Authorization: Bearer <integration token>` + `Notion-Version` 头 |
@@ -30,6 +30,8 @@ examples/cordis.yml   dsh 组合配置示例
 
 Notion Search API 没有稳定的归档页面筛选字段，所以第一版用 `notion_list_page_comments` 替换了最初的 `notion_archived_pages` 建议，保留更可用的评论闭环。
 
+v0.3 补齐分页游标：`notion_search_pages`、`notion_list_databases`、`notion_query_database` 支持 `startCursor`，响应返回 `nextCursor`/`hasMore`，工具数保持 11。
+
 ### 2.2 认证与安全
 
 - 默认端点 `https://api.notion.com`，可通过 `baseUrl` 覆盖，自动去掉尾部斜杠。
@@ -47,6 +49,7 @@ Notion Search API 没有稳定的归档页面筛选字段，所以第一版用 `
 - 创建页面使用 `POST /v1/pages`；page parent 可直接传 `title`，database parent 必须传 `propertiesJson`。
 - 更新页面使用 `PATCH /v1/pages/{id}`，追加 Block 使用 `PATCH /v1/blocks/{id}/children`。
 - 数据库列表使用 `POST /v1/search` 的 `filter.object == database`；数据库查询使用 `POST /v1/databases/{id}/query`。
+- 搜索、数据库列表和数据库查询均支持 `start_cursor` 请求参数，响应返回 `next_cursor`/`has_more`，工具层统一映射为 `startCursor`/`nextCursor`/`hasMore`。
 - 评论使用 `POST /v1/comments` 与 `GET /v1/comments?block_id=...`。
 - 所有 `limit` 都钳制在 1-100，默认 20。
 - 每个请求使用 `AbortSignal.timeout` 与 `exec.signal` 合并，默认 15 秒超时。
@@ -74,13 +77,14 @@ npm run build
 
 - Bearer 认证头与 `Notion-Version` 头。
 - 搜索、页面详情、Block 内容读取。
+- 搜索、数据库列表、数据库查询的分页游标请求与响应映射。
 - 创建页面、更新页面、追加 Block 的请求体与业务失败映射。
 - 数据库列表、数据库 schema、数据库查询、评论、用户结果映射。
 - 11 个工具注册、无凭据保护、JSON 参数校验、render 纯函数与 present 卡片。
+- 当前 21 例全绿，覆盖客户端请求/body/错误映射与工具层注册/渲染。
 
 ## 4. 后续方向
 
-- 分页游标：当前 v0.2 使用 `page_size`/`limit`，后续可暴露 `start_cursor`。
 - 规则化属性映射：从 `propertiesJson` 提取常见 checker/select/date/relation 值。
 - 页面归档列表：等待 Notion Search API 支持稳定归档筛选后再加入。
 

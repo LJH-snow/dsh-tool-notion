@@ -65,6 +65,10 @@ Notion 结构化参数通过 JSON 字符串传入：
 - `content`：纯文本行，自动转换为段落 Block。
 - `filterJson` / `sortsJson`：数据库查询的 filter 和 sort 对象。
 
+### 分页
+
+`notion_search_pages`、`notion_list_databases`、`notion_query_database` 接受上一页返回的 `startCursor`，并返回 `nextCursor` 和 `hasMore`。将 `nextCursor` 作为下一页的 `startCursor` 继续分页。
+
 ### 行为约定
 
 - 未配置凭据时返回明确业务值：读工具返回 `{ authenticated: false, ... }`，写工具返回 `{ created: false, reason }` 或 `{ ok: false, reason }`。

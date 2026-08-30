@@ -65,6 +65,10 @@ For Notion-specific structured inputs, the plugin accepts JSON strings:
 - `content`: plain text lines converted to paragraph blocks as a convenience.
 - `filterJson` / `sortsJson`: Notion database query filter and sort objects.
 
+### Pagination
+
+`notion_search_pages`, `notion_list_databases`, and `notion_query_database` accept `startCursor` from a previous response and return `nextCursor` plus `hasMore`. Pass `nextCursor` back as `startCursor` to continue paginating.
+
 ### Behavior Contract
 
 - Missing credentials return canonical business values: read tools return `{ authenticated: false, ... }`, write tools return `{ created: false, reason }` or `{ ok: false, reason }`.

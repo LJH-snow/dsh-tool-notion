@@ -24,6 +24,12 @@ export interface NotionPageSummary {
   propertiesJson: string
 }
 
+export interface NotionListResult<T> {
+  items: T[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
 export interface NotionPageDetail extends NotionPageSummary {
   content: string
   blockCount: number
@@ -409,20 +415,25 @@ export class NotionClient {
 
   async searchPages(
     query: string,
-    options: { limit?: number; signal?: AbortSignal } = {},
-  ): Promise<NotionPageSummary[]> {
-    const data = await this.request<{ results?: RawPage[] }>(
+    options: { limit?: number; startCursor?: string; signal?: AbortSignal } = {},
+  ): Promise<NotionListResult<NotionPageSummary>> {
+    const data = await this.request<{ results?: RawPage[]; next_cursor?: string | null; has_more?: boolean }>(
       'POST',
       '/v1/search',
       {
         ...(query ? { query } : {}),
         filter: { value: 'page', property: 'object' },
         sort: { direction: 'descending', timestamp: 'last_edited_time' },
+        ...(options.startCursor ? { start_cursor: options.startCursor } : {}),
         page_size: clampLimit(options.limit ?? 20),
       },
       options.signal,
     )
-    return (data.results ?? []).filter(page => page.object === 'page').map(mapPageSummary)
+    return {
+      items: (data.results ?? []).filter(page => page.object === 'page').map(mapPageSummary),
+      nextCursor: data.next_cursor ?? null,
+      hasMore: data.has_more ?? false,
+    }
   }
 
   private async collectBlockLines(
@@ -562,19 +573,24 @@ export class NotionClient {
   }
 
   async listDatabases(
-    options: { limit?: number; signal?: AbortSignal } = {},
-  ): Promise<NotionDatabaseSummary[]> {
-    const data = await this.request<{ results?: RawDatabase[] }>(
+    options: { limit?: number; startCursor?: string; signal?: AbortSignal } = {},
+  ): Promise<NotionListResult<NotionDatabaseSummary>> {
+    const data = await this.request<{ results?: RawDatabase[]; next_cursor?: string | null; has_more?: boolean }>(
       'POST',
       '/v1/search',
       {
         filter: { value: 'database', property: 'object' },
         sort: { direction: 'descending', timestamp: 'last_edited_time' },
+        ...(options.startCursor ? { start_cursor: options.startCursor } : {}),
         page_size: clampLimit(options.limit ?? 20),
       },
       options.signal,
     )
-    return (data.results ?? []).filter(database => database.object === 'database').map(mapDatabase)
+    return {
+      items: (data.results ?? []).filter(database => database.object === 'database').map(mapDatabase),
+      nextCursor: data.next_cursor ?? null,
+      hasMore: data.has_more ?? false,
+    }
   }
 
   async getDatabase(
@@ -596,20 +612,26 @@ export class NotionClient {
       filter?: Record<string, unknown>
       sorts?: unknown[]
       limit?: number
+      startCursor?: string
       signal?: AbortSignal
     } = {},
-  ): Promise<NotionPageSummary[]> {
-    const data = await this.request<{ results?: RawPage[] }>(
+  ): Promise<NotionListResult<NotionPageSummary>> {
+    const data = await this.request<{ results?: RawPage[]; next_cursor?: string | null; has_more?: boolean }>(
       'POST',
       `/v1/databases/${encodeURIComponent(databaseId)}/query`,
       {
         page_size: clampLimit(options.limit ?? 20),
+        ...(options.startCursor ? { start_cursor: options.startCursor } : {}),
         ...(options.filter ? { filter: options.filter } : {}),
         ...(options.sorts?.length ? { sorts: options.sorts } : {}),
       },
       options.signal,
     )
-    return (data.results ?? []).map(mapPageSummary)
+    return {
+      items: (data.results ?? []).map(mapPageSummary),
+      nextCursor: data.next_cursor ?? null,
+      hasMore: data.has_more ?? false,
+    }
   }
 
   async listPageComments(
