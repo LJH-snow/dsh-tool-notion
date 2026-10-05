@@ -3,6 +3,10 @@ import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { NotionClient } from '../src/client.ts'
 import { createTools } from '../src/index.ts'
 
+/** Deterministic DNS so tests never depend on real resolution. */
+const publicLookup = async () => [{ address: '93.184.216.34', family: 4 as const }]
+
+
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 }
@@ -11,7 +15,7 @@ function exec(): ToolRunContext {
   return { signal: new AbortController().signal } as unknown as ToolRunContext
 }
 
-function tools(client = new NotionClient({ fetchImpl: globalThis.fetch })) {
+function tools(client = new NotionClient({ lookupImpl: publicLookup, fetchImpl: globalThis.fetch })) {
   return Object.fromEntries(createTools(client).map(tool => [tool.name, tool]))
 }
 
@@ -62,7 +66,7 @@ describe('tool definitions', () => {
 
   it('search_pages executes with a token and forwards the request body', async () => {
     const fetchImpl = vi.fn(async () => json({ results: [pageNode], next_cursor: 'cursor-2', has_more: true }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const map = tools(client)
     const result = await map.notion_search_pages.execute({ query: 'release', limit: 500, startCursor: 'cursor-1' }, exec())
     expect(result).toMatchObject({
@@ -95,7 +99,7 @@ describe('tool definitions', () => {
       next_cursor: 'db-next',
       has_more: true,
     }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const map = tools(client)
     const result = await map.notion_list_databases.execute({ limit: 10, startCursor: 'db-cursor' }, exec())
     expect(result).toMatchObject({ authenticated: true, found: true, items: [{ title: 'Projects' }], nextCursor: 'db-next', hasMore: true })
@@ -106,7 +110,7 @@ describe('tool definitions', () => {
 
   it('create_page validates parents and forwards properties and children', async () => {
     const fetchImpl = vi.fn(async () => json({ id: 'page-2', url: 'https://www.notion.so/new' }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const map = tools(client)
     const result = await map.notion_create_page.execute({
       parentPageId: 'parent-1',
@@ -123,7 +127,7 @@ describe('tool definitions', () => {
   })
 
   it('update_page rejects invalid propertiesJson', async () => {
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl: vi.fn() })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: vi.fn() })
     const map = tools(client)
     const result = await map.notion_update_page.execute({ id: 'page-1', propertiesJson: 'not json' }, exec())
     expect(result).toMatchObject({ ok: false, reason: 'propertiesJson must be a valid JSON object.' })
@@ -131,7 +135,7 @@ describe('tool definitions', () => {
 
   it('query_database parses filter and sorts JSON', async () => {
     const fetchImpl = vi.fn(async () => json({ results: [pageNode], next_cursor: null, has_more: false }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const map = tools(client)
     const result = await map.notion_query_database.execute({
       databaseId: 'db-1',
@@ -172,7 +176,7 @@ describe('tool definitions', () => {
         },
       },
     }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const map = tools(client)
     const result = await map.notion_get_database_schema.execute({ databaseId: 'db-1' }, exec())
 

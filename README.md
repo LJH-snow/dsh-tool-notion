@@ -42,6 +42,8 @@ Full example: [examples/cordis.yml](examples/cordis.yml).
 
 > Security: create an internal integration under Notion My integrations, allow only the workspaces/pages it needs, and never commit the token. Every tool requires a token because Notion workspace access and write permissions are controlled by the integration.
 
+The `baseUrl` override must be an absolute `http://` or `https://` root URL. Only publicly reachable hosts are allowed: localhost, loopback, private, link-local, CGNAT, multicast, reserved/documentation/benchmark ranges, and every IANA special-purpose block are rejected, and a hostname whose DNS results contain any such address fails closed before the request is sent. Credentials, query strings, fragments, and non-root paths are not allowed.
+
 ## Tools
 
 | Tool | Description | Credentials |

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { NotionClient, NotionError } from '../src/client.ts'
 
+/** Deterministic DNS so tests never depend on real resolution. */
+const publicLookup = async () => [{ address: '93.184.216.34', family: 4 as const }]
+
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
@@ -55,7 +59,7 @@ const databaseSchemaNode = {
 describe('NotionClient', () => {
   it('searches pages with bearer auth, version header, filter, page size, and cursor', async () => {
     const fetchImpl = vi.fn(async () => json({ results: [pageNode], next_cursor: 'cursor-2', has_more: true }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const result = await client.searchPages('release', { limit: 500, startCursor: 'cursor-1' })
 
     expect(result.items[0]).toMatchObject({
@@ -88,7 +92,7 @@ describe('NotionClient', () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(json(pageNode))
       .mockResolvedValueOnce(json({ results: [blockNode] }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const detail = await client.getPage('page-1')
 
     expect(detail).toMatchObject({
@@ -103,7 +107,7 @@ describe('NotionClient', () => {
 
   it('gets page metadata without fetching blocks', async () => {
     const fetchImpl = vi.fn(async () => json(pageNode))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const detail = await client.getPage('page-1', { includeContent: false })
     expect(detail.blockCount).toBe(0)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
@@ -111,7 +115,7 @@ describe('NotionClient', () => {
 
   it('creates a page under a page parent with title and children', async () => {
     const fetchImpl = vi.fn(async () => json({ id: 'page-2', url: 'https://www.notion.so/New-page' }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const result = await client.createPage({
       parentPageId: 'parent-1',
       title: 'New page',
@@ -127,7 +131,7 @@ describe('NotionClient', () => {
 
   it('creates a database page from parsed properties and maps validation errors', async () => {
     const successFetch = vi.fn(async () => json({ id: 'page-3', url: 'https://www.notion.so/row' }))
-    const successClient = new NotionClient({ apiToken: 'ntn_test', fetchImpl: successFetch })
+    const successClient = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: successFetch })
     const result = await successClient.createPage({
       parentDatabaseId: 'db-1',
       properties: { Name: { title: [{ text: { content: 'Row name' } }] } },
@@ -138,7 +142,7 @@ describe('NotionClient', () => {
     expect(body.properties.Name.title[0].text.content).toBe('Row name')
 
     const errorFetch = vi.fn(async () => json({ message: 'Could not find database', code: 'validation_error' }, 404))
-    const errorClient = new NotionClient({ apiToken: 'ntn_test', fetchImpl: errorFetch })
+    const errorClient = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: errorFetch })
     await expect(errorClient.createPage({
       parentDatabaseId: 'missing',
       properties: { Name: { title: [{ text: { content: 'x' } }] } },
@@ -147,7 +151,7 @@ describe('NotionClient', () => {
 
   it('updates a page and appends blocks with the expected payloads', async () => {
     const updateFetch = vi.fn(async () => json({ id: 'page-1' }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl: updateFetch })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: updateFetch })
     const update = await client.updatePage('page-1', { title: 'Renamed' })
     const updateBody = JSON.parse(String((updateFetch.mock.calls[0] as [string, RequestInit])[1]?.body))
     expect(update).toEqual({ ok: true, id: 'page-1' })
@@ -155,7 +159,7 @@ describe('NotionClient', () => {
     expect((updateFetch.mock.calls[0] as [string, RequestInit])[0]).toBe('https://api.notion.com/v1/pages/page-1')
 
     const appendFetch = vi.fn(async () => json({ results: [{ id: 'block-2' }] }))
-    const appendClient = new NotionClient({ apiToken: 'ntn_test', fetchImpl: appendFetch })
+    const appendClient = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: appendFetch })
     const append = await appendClient.appendBlocks('block-1', {
       children: [{ object: 'block', type: 'quote', quote: { rich_text: [{ text: { content: 'Quoted' } }] } }],
     })
@@ -175,7 +179,7 @@ describe('NotionClient', () => {
       title: [{ plain_text: 'Projects', text: { content: 'Projects' } }],
     }
     const dbFetch = vi.fn(async () => json({ results: [databaseNode], next_cursor: 'db-next', has_more: true }))
-    const dbClient = new NotionClient({ apiToken: 'ntn_test', fetchImpl: dbFetch })
+    const dbClient = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: dbFetch })
     const databases = await dbClient.listDatabases({ limit: 3, startCursor: 'db-cursor' })
     expect(databases).toMatchObject({ items: [{ id: 'db-1', title: 'Projects' }], nextCursor: 'db-next', hasMore: true })
     const dbBody = JSON.parse(String((dbFetch.mock.calls[0] as [string, RequestInit])[1]?.body))
@@ -183,7 +187,7 @@ describe('NotionClient', () => {
     expect(dbBody.start_cursor).toBe('db-cursor')
 
     const queryFetch = vi.fn(async () => json({ results: [pageNode], next_cursor: 'query-next', has_more: false }))
-    const queryClient = new NotionClient({ apiToken: 'ntn_test', fetchImpl: queryFetch })
+    const queryClient = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: queryFetch })
     const rows = await queryClient.queryDatabase('db-1', {
       filter: { property: 'Status', status: { equals: 'Done' } },
       sorts: [{ property: 'Last edited time', direction: 'descending' }],
@@ -203,7 +207,7 @@ describe('NotionClient', () => {
 
   it('gets a database schema and normalizes property options and details', async () => {
     const fetchImpl = vi.fn(async () => json(databaseSchemaNode))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const schema = await client.getDatabase('db-1')
 
     expect(schema).toMatchObject({
@@ -234,14 +238,14 @@ describe('NotionClient', () => {
       parent: { type: 'page_id', page_id: 'page-1' },
     }
     const listFetch = vi.fn(async () => json({ results: [commentNode] }))
-    const comments = new NotionClient({ apiToken: 'ntn_test', fetchImpl: listFetch })
+    const comments = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: listFetch })
     expect(await comments.listPageComments('page-1')).toMatchObject([
       { id: 'comment-1', text: 'Looks good', authorName: 'Alice', parentId: 'page-1' },
     ])
     expect(listFetch.mock.calls[0][0]).toBe('https://api.notion.com/v1/comments?block_id=page-1')
 
     const createFetch = vi.fn(async () => json({ id: 'comment-2' }))
-    const createClient = new NotionClient({ apiToken: 'ntn_test', fetchImpl: createFetch })
+    const createClient = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: createFetch })
     const created = await createClient.addComment('page-1', 'Please review')
     expect(created).toEqual({ ok: true, id: 'comment-2' })
     const body = JSON.parse(String((createFetch.mock.calls[0] as [string, RequestInit])[1]?.body))
@@ -256,7 +260,7 @@ describe('NotionClient', () => {
         { id: 'bot-1', type: 'bot', name: 'Harness', avatar_url: null, bot: { workspace_name: 'Default' } },
       ],
     }))
-    const client = new NotionClient({ apiToken: 'ntn_test', fetchImpl })
+    const client = new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl })
     const users = await client.listUsers({ limit: 50 })
     expect(users).toMatchObject([
       { id: 'user-1', email: 'alice@example.com', botWorkspaceName: null },
@@ -267,14 +271,86 @@ describe('NotionClient', () => {
 
   it('throws infrastructure errors and keeps validation errors as business values', async () => {
     const authFetch = vi.fn(async () => json({ message: 'Invalid token', code: 'unauthorized' }, 401))
-    await expect(new NotionClient({ apiToken: 'bad', fetchImpl: authFetch }).searchPages('x'))
+    await expect(new NotionClient({ lookupImpl: publicLookup, apiToken: 'bad', fetchImpl: authFetch }).searchPages('x'))
       .rejects.toThrow(NotionError)
 
     const badInputFetch = vi.fn(async () => json({ message: 'Bad property value', code: 'validation_error' }, 400))
-    const result = await new NotionClient({ apiToken: 'ntn_test', fetchImpl: badInputFetch }).createPage({
+    const result = await new NotionClient({ lookupImpl: publicLookup, apiToken: 'ntn_test', fetchImpl: badInputFetch }).createPage({
       parentPageId: 'parent-1',
       title: 'x',
     })
     expect(result).toMatchObject({ created: false, reason: 'Bad property value' })
+  })
+})
+
+describe('Notion endpoint security', () => {
+  const valid = { apiToken: 'ntn_test' }
+
+  it('rejects invalid base URLs without exposing their contents', () => {
+    for (const baseUrl of [
+      'api.notion.com',
+      'ftp://api.notion.com',
+      'https://user:secretapi.notion.com',
+      'https://api.notion.com?token=secret',
+      'https://api.notion.com#fragment',
+    ]) {
+      let error: unknown
+      try { new NotionClient({ ...valid, baseUrl }) } catch (thrown) { error = thrown }
+      expect(error).toBeInstanceOf(NotionError)
+      expect(String(error)).not.toContain('secret')
+    }
+  })
+
+  it('rejects literal local, private, and reserved addresses before fetch', async () => {
+    for (const baseUrl of [
+      'http://localhost',
+      'http://service.localhost',
+      'http://service.local',
+      'http://127.0.0.1',
+      'http://169.254.169.254',
+      'http://10.0.0.1',
+      'http://192.168.1.1',
+      'http://192.0.2.1',
+      'http://198.18.0.1',
+      'http://224.0.0.1',
+      'http://192.175.48.1',
+      'http://[::1]',
+      'http://[fc00::1]',
+      'http://[fe80::1]',
+      'http://[fec0::1]',
+      'http://[2001:db8::1]',
+      'http://[2001:3::1]',
+      'http://[2001:4:112::1]',
+      'http://[2001:30::1]',
+      'http://[5f00::1]',
+      'http://[100:0:0:1::1]',
+      'http://[2620:4f:8000::1]',
+      'http://[64:ff9b::7f00:1]',
+      'http://[ff02::1]',
+    ]) {
+      const fetchImpl = vi.fn()
+      await expect(new NotionClient({ ...valid, baseUrl, fetchImpl }).listUsers()).rejects.toMatchObject({ name: 'NotionError' })
+      expect(fetchImpl).not.toHaveBeenCalled()
+    }
+  })
+
+  it('fails closed on blocked, failed, empty, or inconsistent DNS results', async () => {
+    for (const lookupImpl of [
+      async () => [{ address: '192.168.1.10', family: 4 as const }],
+      async () => [{ address: '93.184.216.34', family: 4 as const }, { address: '169.254.169.254', family: 4 as const }],
+      async () => { throw new Error('dns failure') },
+      async () => [],
+      async () => [{ address: '2001:db8::1', family: 4 as const }],
+    ]) {
+      const fetchImpl = vi.fn()
+      await expect(new NotionClient({ ...valid, baseUrl: 'https://notion.example.test', fetchImpl, lookupImpl }).listUsers()).rejects.toMatchObject({ name: 'NotionError' })
+      expect(fetchImpl).not.toHaveBeenCalled()
+    }
+  })
+
+  it('allows a public endpoint that resolves to a public address', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }))
+    await new NotionClient({ ...valid, baseUrl: 'https://notion.example.test', fetchImpl, lookupImpl: publicLookup }).listUsers().catch(() => undefined)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 })

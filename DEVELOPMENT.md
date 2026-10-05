@@ -6,7 +6,7 @@
 |---|---|
 | 项目名 | `dsh-tool-notion` |
 | 定位 | DeepSeek Harness 的独立 Notion 知识库插件 |
-| 版本 | v0.3.0 |
+| 版本 | v0.4.0 |
 | 架构 | Cordis 插件 + `ctx.tools.register(defineTool(...))` |
 | API | Notion REST API v1 |
 | 认证 | `Authorization: Bearer <integration token>` + `Notion-Version` 头 |
@@ -89,3 +89,7 @@ npm run build
 - 页面归档列表：等待 Notion Search API 支持稳定归档筛选后再加入。
 
 开发新能力时保持同一个客户端的错误映射和 Block 转文本约定，避免模型看到的返回结构分裂。
+
+## endpoint 安全校验
+
+`baseUrl` 规范化为 origin + 路径前缀，禁止 credentials、query 和 fragment。每次请求前用 `src/url-security.ts` 做 fail-closed 目标校验：拒绝 localhost/.local 名称、环回、私有、链路本地、CGNAT、组播、保留及全部 IANA 特殊用途地址段，域名 DNS 结果含任一此类地址即拒绝。阻断清单（18 个 IPv4 + 16 个 IPv6）与 IANA 注册表对齐，`src/url-security.ts` 由 `.verify/url-security.template.ts` 生成，不得单独修改。`lookupImpl` 仅作测试注入点，不进入插件配置接口。

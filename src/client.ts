@@ -1,5 +1,7 @@
 /** Minimal Notion REST API client with injected fetch for testability. */
 
+import { assertSafeUrl, EndpointSecurityError, normalizeBaseUrl, type LookupImpl } from './url-security.js'
+
 export interface NotionClientOptions {
   /** Notion internal integration token, usually starts with ntn_. */
   apiToken?: string
@@ -10,6 +12,8 @@ export interface NotionClientOptions {
   notionVersion?: string
   /** Request timeout in milliseconds. 0 disables the timeout. */
   timeoutMs?: number
+  /** Test-only DNS lookup override; production uses node:dns/promises. */
+  lookupImpl?: LookupImpl
 }
 
 export interface NotionPageSummary {
@@ -355,13 +359,20 @@ export class NotionClient {
   private readonly fetchImpl: typeof fetch
   private readonly notionVersion: string
   private readonly timeoutMs: number
+  private readonly lookupImpl: LookupImpl | undefined
 
   constructor(options: NotionClientOptions = {}) {
     this.apiToken = options.apiToken ?? ''
-    this.baseUrl = (options.baseUrl ?? 'https://api.notion.com').replace(/\/+$/, '')
+    try {
+      this.baseUrl = normalizeBaseUrl(options.baseUrl, 'https://api.notion.com')
+    } catch (error) {
+      if (error instanceof EndpointSecurityError) throw new NotionError(error.message, 400)
+      throw error
+    }
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch
     this.notionVersion = options.notionVersion ?? '2022-06-28'
     this.timeoutMs = options.timeoutMs ?? 15_000
+    this.lookupImpl = options.lookupImpl
   }
 
   hasToken(): boolean {
@@ -390,6 +401,12 @@ export class NotionClient {
     body?: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<T> {
+    try {
+      await assertSafeUrl(new URL(`${this.baseUrl}${path}`), this.lookupImpl)
+    } catch (error) {
+      if (error instanceof EndpointSecurityError) throw new NotionError(error.message, 400)
+      throw error
+    }
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers: this.headers(),
